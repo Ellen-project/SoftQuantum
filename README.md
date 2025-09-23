@@ -3,7 +3,7 @@
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Python](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
 
-**SoftQuantum** is a high-performance quantum circuit simulator developed in Python. It features a dual-backend architecture, supporting both a CPU-based implementation using NumPy and GPU acceleration via a custom CUDA backend. This enables the efficient simulation of complex quantum state vectors. For enhanced usability, the project includes **QASM Studio**, a graphical user interface (GUI) for writing, executing, and reviewing QASM code in real-time.
+**SoftQuantum** is a quantum circuit simulator developed in Python. It features a dual-backend architecture, supporting both a CPU-based implementation using NumPy and GPU acceleration via a custom CUDA backend. This enables the efficient simulation of complex quantum state vectors. For enhanced usability, the project includes **QASM Studio**, a graphical user interface (GUI) for writing, executing, and reviewing QASM code in real-time.
 
 ## Core Features
 
