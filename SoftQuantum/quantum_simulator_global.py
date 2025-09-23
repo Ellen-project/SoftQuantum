@@ -74,7 +74,6 @@ class QuantumSimulator:
         if U.shape != (m, m):
             raise ValueError(f"U must be {(m, m)} for k={k}, got {U.shape}")
 
-        # CUDA fast path for k in {1,2} and generic k (3..16)
         if _HAVE_CUDA:
             try:
                 if k == 1:
@@ -86,7 +85,6 @@ class QuantumSimulator:
                     self._normalize_()
                     return
                 elif 3 <= k <= 16:
-                    # Memory note: full U is uploaded (16 * 4^k bytes for complex128).
                     svcuda.apply_kq(self.state, self.num_qubits, np.array(t, dtype=np.int32), U)
                     self._normalize_()
                     return
@@ -94,18 +92,16 @@ class QuantumSimulator:
                 # fall back to CPU
                 pass
 
-        # CPU vectorized path
         psi = self._as_tensor()
         axes = tuple(self._axis_of(q) for q in t)
+        axes_front = tuple(reversed(axes))
         rest_axes = tuple(ax for ax in range(self.num_qubits) if ax not in axes)
-        moved = np.moveaxis(psi, axes + rest_axes, tuple(range(self.num_qubits)))
-        front = moved.reshape((m, -1))
+        perm = axes_front + rest_axes
+        permuted = np.transpose(psi, perm)
+        front = permuted.reshape((m, -1))
         front2 = U @ front
-        moved2 = front2.reshape((2,) * self.num_qubits)
-        # Move axes back
-        inv_perm = np.argsort((*axes, *rest_axes))
-        psi2 = np.moveaxis(moved2, tuple(range(self.num_qubits)), (*axes, *rest_axes))
-        psi2 = psi2.transpose(inv_perm)
+        reshaped = front2.reshape((2,) * self.num_qubits)
+        psi2 = np.transpose(reshaped, np.argsort(perm))
         self.state = psi2.reshape(self.dim).astype(self.dtype, copy=False)
         self._normalize_()
 
@@ -130,15 +126,15 @@ class QuantumSimulator:
             raise ValueError("ctrl_state length must match number of controls")
 
         k = len(t)
+        if k == 0:
+            return
         m = 1 << k
         U = np.asarray(U, dtype=self.dtype)
         if U.shape != (m, m):
             raise ValueError(f"U must be {(m, m)} for k={k}, got {U.shape}")
 
-        # CUDA fast path for 1q/2q targets with all-ones control state
         if _HAVE_CUDA and (k in (1, 2)) and all(b == 1 for b in ctrl_state):
             try:
-                # Build control bitmask (1 where control must be 1)
                 mask = 0
                 for q in c:
                     mask |= (1 << q)
@@ -151,21 +147,20 @@ class QuantumSimulator:
             except Exception:
                 pass
 
-        # CPU path
         psi = self._as_tensor()
         ax_c = tuple(self._axis_of(q) for q in c)
         ax_t = tuple(self._axis_of(q) for q in t)
+        ax_t_front = tuple(reversed(ax_t))
         rest = tuple(ax for ax in range(self.num_qubits) if ax not in (*ax_c, *ax_t))
-        moved = np.moveaxis(psi, (*ax_c, *ax_t, *rest), tuple(range(self.num_qubits)))
+        perm = ax_c + ax_t_front + rest
+        moved = np.transpose(psi, perm)
         idx_ctrl = tuple(int(b) for b in ctrl_state)
         slices = idx_ctrl + (slice(None),) * (len(ax_t) + len(rest))
         block = moved[slices]
         front = block.reshape((m, -1))
         front2 = U @ front
         moved[slices] = front2.reshape(block.shape)
-        inv_perm = np.argsort((*ax_c, *ax_t, *rest))
-        out = np.moveaxis(moved, tuple(range(self.num_qubits)), (*ax_c, *ax_t, *rest))
-        out = out.transpose(inv_perm)
+        out = np.transpose(moved, np.argsort(perm))
         self.state = out.reshape(self.dim).astype(self.dtype, copy=False)
         self._normalize_()
 
@@ -190,14 +185,14 @@ class QuantumSimulator:
             raise ValueError(f"Operator must be {(m, m)} for k={k}")
         psi = self._as_tensor()
         axes = tuple(self._axis_of(q) for q in t)
+        axes_front = tuple(reversed(axes))
         rest_axes = tuple(ax for ax in range(self.num_qubits) if ax not in axes)
-        moved = np.moveaxis(psi, axes + rest_axes, tuple(range(self.num_qubits)))
+        perm = axes_front + rest_axes
+        moved = np.transpose(psi, perm)
         front = moved.reshape((m, -1))
         front2 = M @ front
-        moved2 = front2.reshape((2,) * self.num_qubits)
-        inv_perm = np.argsort((*axes, *rest_axes))
-        psi2 = np.moveaxis(moved2, tuple(range(self.num_qubits)), (*axes, *rest_axes))
-        psi2 = psi2.transpose(inv_perm)
+        reshaped = front2.reshape((2,) * self.num_qubits)
+        psi2 = np.transpose(reshaped, np.argsort(perm))
         return psi2.reshape(self.dim).astype(self.dtype, copy=False)
 
     def apply_channel(self, targets: Sequence[int], kraus_ops: Sequence[Array]):
@@ -216,6 +211,56 @@ class QuantumSimulator:
         idx = int(self.rng.choice(len(ops), p=probs))
         v = candidates[idx]
         self.state = v / math.sqrt(max(np.vdot(v, v).real, _EPS))
+
+    def noise_bit_flip(self, q: int, p: float):
+        p = float(p)
+        p = min(max(p, 0.0), 1.0)
+        a0 = math.sqrt(max(0.0, 1.0 - p))
+        a1 = math.sqrt(max(0.0, p))
+        K0 = a0 * np.eye(2, dtype=self.dtype)
+        K1 = a1 * np.array([[0, 1], [1, 0]], dtype=self.dtype)
+        self.apply_channel([q], [K0, K1])
+
+
+    def noise_phase_flip(self, q: int, p: float):
+        p = float(p)
+        p = min(max(p, 0.0), 1.0)
+        a0 = math.sqrt(max(0.0, 1.0 - p))
+        a1 = math.sqrt(max(0.0, p))
+        K0 = a0 * np.eye(2, dtype=self.dtype)
+        K1 = a1 * np.array([[1, 0], [0, -1]], dtype=self.dtype)
+        self.apply_channel([q], [K0, K1])
+
+
+    def noise_depolarizing(self, q: int, p: float):
+        p = float(p)
+        p = min(max(p, 0.0), 1.0)
+        ops = [math.sqrt(max(0.0, 1.0 - p)) * np.eye(2, dtype=self.dtype)]
+        if p > 0.0:
+            coef = math.sqrt(p / 3.0)
+            ops.extend([
+                coef * np.array([[0, 1], [1, 0]], dtype=self.dtype),
+                coef * np.array([[0, -1j], [1j, 0]], dtype=self.dtype),
+                coef * np.array([[1, 0], [0, -1]], dtype=self.dtype),
+            ])
+        self.apply_channel([q], ops)
+
+
+    def noise_amplitude_damping(self, q: int, p: float):
+        p = float(p)
+        p = min(max(p, 0.0), 1.0)
+        K0 = np.array([[1.0, 0.0], [0.0, math.sqrt(max(0.0, 1.0 - p))]], dtype=self.dtype)
+        K1 = np.array([[0.0, math.sqrt(max(0.0, p))], [0.0, 0.0]], dtype=self.dtype)
+        self.apply_channel([q], [K0, K1])
+
+
+    def noise_phase_damping(self, q: int, p: float):
+        p = float(p)
+        p = min(max(p, 0.0), 1.0)
+        K0 = np.array([[1.0, 0.0], [0.0, math.sqrt(max(0.0, 1.0 - p))]], dtype=self.dtype)
+        K1 = np.array([[0.0, 0.0], [0.0, math.sqrt(max(0.0, p))]], dtype=self.dtype)
+        self.apply_channel([q], [K0, K1])
+
 
     # ---------------------------- Standard gates ----------------------------
     # Base single-qubit rotations
@@ -445,7 +490,8 @@ class QuantumSimulator:
             moved[..., 1] = 0.0
         else:
             moved[..., 0] = 0.0
-        self.state = moved.reshape(self.dim)
+        psi_back = np.moveaxis(moved, -1, ax)
+        self.state = psi_back.reshape(self.dim)
         self._normalize_()
         if cbit is not None and 0 <= cbit < len(self.creg):
             self.creg[cbit] = outcome
@@ -463,7 +509,8 @@ class QuantumSimulator:
         psi = self._as_tensor()
         moved = np.moveaxis(psi, ax, -1)
         moved[..., 1] = 0.0
-        self.state = moved.reshape(self.dim)
+        psi_back = np.moveaxis(moved, -1, ax)
+        self.state = psi_back.reshape(self.dim)
         self._normalize_()
 
     # ----------------------------- Debug helpers ----------------------------
