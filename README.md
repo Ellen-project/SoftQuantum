@@ -5,6 +5,8 @@
 
 **SoftQuantum** is a quantum computing simulation developed with Python and cuda.
 
+he last code update is 2024/12/23.
+
 ## Core Features
 
 * **Hybrid CPU/GPU Backend**: The simulator accelerates computations using CUDA kernels on compatible NVIDIA GPUs and seamlessly falls back to a multi-threaded NumPy implementation on systems without a dedicated GPU.
@@ -58,4 +60,4 @@ Launch the graphical user interface by running the following command from the te
 python qasm_gui.py
 ```
 
-##The last code update is 2024/12/23.
+
