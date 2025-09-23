@@ -5,7 +5,7 @@
 
 **SoftQuantum** is a quantum computing simulation developed with Python and cuda.
 
-he last code update is 2024/12/23.
+The last code update is 2024/12/23.
 
 ## Core Features
 
