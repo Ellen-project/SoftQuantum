@@ -56,3 +56,6 @@ Launch the graphical user interface by running the following command from the te
 
 ```bash
 python qasm_gui.py
+```
+
+##The last code update is 2024/12/23.
