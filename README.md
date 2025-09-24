@@ -24,7 +24,7 @@ The last code update is 2024/12/23.
 ### Prerequisites
 
 * Python 3.7 or later
-* NVIDIA GPU and the [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit-download) (required for GPU acceleration)
+* NVIDIA GPU and the [CUDA Toolkit]([https://developer.nvidia.com/cuda-toolkit-download](https://developer.nvidia.com/cuda-downloads)) (required for GPU acceleration)
 * A C++ compiler (e.g., GCC, Clang, or MSVC)
 * Required Python libraries: `numpy`, `pybind11`
 
