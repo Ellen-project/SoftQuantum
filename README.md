@@ -60,7 +60,7 @@ Launch the graphical user interface by running the following command from the te
 python qasm_gui.py
 ```
 
-###2. Executing the test code
+### 2. Executing the test code
 
 Launch the graphical user interface by running the following command from the terminal:
 
