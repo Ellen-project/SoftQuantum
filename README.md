@@ -60,4 +60,10 @@ Launch the graphical user interface by running the following command from the te
 python qasm_gui.py
 ```
 
+###2. Executing the test code
 
+Launch the graphical user interface by running the following command from the terminal:
+
+```bash
+python -m pytest tests/test_quantum_simulator.py
+```
